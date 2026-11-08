@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema 
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  elementFormDefault="qualified"
+  attributeFormDefault="unqualified">
+
+  <!-- ルート要素 manual -->
+  <xs:element name="manual">
+    <xs:annotation>
+      <xs:documentation>ゲームマニュアル全体のルート要素。</xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="page" type="PageType" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:attribute name="title" type="xs:string" use="optional">
+        <xs:annotation>
+          <xs:documentation>
+            マニュアルのタイトル。マニュアルを含むゲームのタイトルではない。本文から抽出すること。例：「ファイナルファンタジーIV 取扱説明書」
+          </xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attribute name="lang" type="xs:string" use="optional">
+        <xs:annotation>
+          <xs:documentation>
+            マニュアルの言語。例：ja, en, zh, ko, etc.
+          </xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attribute name="identifier" type="xs:string" use="required">
+        <xs:annotation>
+          <xs:documentation>
+            対象リソースを含む資料の管理ID。IDはファイル名の一部から取得する。例: RCGSa0000001
+          </xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attribute name="model" type="xs:string" use="required">
+        <xs:annotation>
+          <xs:documentation>
+            エンコーディングに用いたLLMのモデル名。例：gemini_3.9_flash
+          </xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- ページ -->
+  <xs:complexType name="PageType">
+    <xs:annotation>
+      <xs:documentation>マニュアルの物理ページ単位。</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="section" type="SectionType" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="number" type="xs:positiveInteger" use="required"/>
+    <xs:attribute name="img" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <!-- セクション（再帰構造） -->
+  <xs:complexType name="SectionType">
+    <xs:annotation>
+      <xs:documentation>
+        マニュアルの論理区切り。内部に再帰的に子sectionを持つことが可能。
+      </xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="head" type="InlineTextType" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>見出し。その区間に見出しが無い場合は出力しない。</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="p" type="InlineTextType"/>
+        <xs:element name="list" type="ListType"/>
+        <xs:element name="credit" type="CreditType"/>
+        <xs:element name="copyRight" type="InlineTextType"/>
+        <xs:element name="section" type="SectionType"/>
+      </xs:choice>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:ID" use="optional"/>
+    <xs:attribute name="type" type="SectionTypeCategory" use="optional"/>
+  </xs:complexType>
+
+  <!-- リスト要素 -->
+  <xs:complexType name="ListType">
+    <xs:annotation>
+      <xs:documentation>箇条書きや番号付きリストを表現する要素。</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="li" type="InlineTextType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- クレジット要素 -->
+  <xs:complexType name="CreditType" mixed="true">
+    <xs:annotation>
+      <xs:documentation>
+        【定義】制作、出版、著作等の責任帰属を示す1単位のデータ。
+        役割（role）と行為主体（person, org）をひとまとまりとして囲む。
+        【内包可能要素】
+        - role（クレジット内限定タグ）
+        - person, org, location, time（クレジット内外問わず利用可能な共通エンティティ）
+      </xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="role" type="NamedEntityType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】creditの中で用いられる特定のひと（person）・組織（org）に対応する役割・役職名。
+            ※roleはcredit要素の内部でのみ使用される。
+            【該当例】「プロデューサー」「ディレクター」「ゲームデザイン」「プログラム」「QA」「音楽」「発売元」「開発」
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="person" type="NamedEntityType"/>
+      <xs:element name="org" type="NamedEntityType"/>
+      <xs:element name="location" type="NamedEntityType"/>
+      <xs:element name="time" type="NamedEntityType"/>
+    </xs:choice>
+  </xs:complexType>
+
+  <!-- 本文・見出し・リスト項目用共通型 (Mixed Content) -->
+  <xs:complexType name="InlineTextType" mixed="true">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+
+      <!-- ================= ゲーム内世界エンティティ ================= -->
+
+      <xs:element name="character" type="NamedEntityType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】ゲームの世界観・ストーリー・ゲームプレイ内に登場する架空のキャラクター、人物、生物、敵、NPCの名称。
+            【抽出対象】プレイヤブルキャラクター、仲間（例: 「マリオ」「リンク」）、ボス・敵（例: 「クッパ」）、名前付きNPC。
+            【対象外】現実の開発者（→ person）、プレイヤー自身（「あなた」など）。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="gameLocation" type="NamedEntityType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】ゲーム内世界に存在する地名、エリア、フィールド、ダンジョン、施設、ステージ名。架空のものだけでなく、ゲーム内に登場する地名・住所も対象となる。
+            【抽出対象】エリア名、町名、ダンジョン名（例: 「ハイラル城」「竜王の城」「市ヶ谷」）。
+            【対象外】製品の責任に関するゲーム内世界に登場するものではない現実世界の地名・住所（→ location）。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="gameTime" type="NamedEntityType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】ゲーム内世界の設定・環境における時間、時期、季節、暦、またはゲームシステム上の制限時間。
+            【抽出対象】作中の時間帯（「U.C.0079」「神世紀7年」）、暦（「春の月」「3日目」）、制限時間（「制限時間3分」）。
+            【対象外】ゲーム内世界の時間と関連しない製品の責任に関する現実世界の日時（→ time）。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="gameItem" type="NamedEntityType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】ゲーム内でプレイヤーが所持、獲得、装備、消費、交換できるアイテム、道具、装備品、収集物、通貨。
+            【抽出対象】消費アイテム（「ポーション」）、装備（「どうのつるぎ」）、キーアイテム、通貨（「ゴールド」）。
+            【対象外】現実世界の物品（乾電池、ケーブル等）。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <!-- ================= ハードウェア・操作系エンティティ ================= -->
+
+      <xs:element name="device" type="NamedEntityType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】ゲームを動作・操作・表示・体験するために使用する、現実世界のハードウェア本体、コントローラー、専用周辺機器の名称。
+            【抽出対象】本体（「Nintendo Switch」「PlayStation 5」）、コントローラー（「Joy-Con」）、周辺機器。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="partOfDevice" type="PartOfDeviceType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】deviceに物理的に備わっている入力インターフェース（ボタン、スティック、十字キーなど）の名称。
+            【必須要件】必ず type 属性（button | stick | dpad）を指定して分類すること。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <!-- ================= 現実世界・制作責任エンティティ（credit内外問わず使用可能） ================= -->
+
+      <xs:element name="person" type="NamedEntityType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】ゲームの創作、制作、出版、権利に関連する現実世界の個人名。
+            ※credit要素の内部でも、本文（p等）の外部でも出現可能。
+            【抽出対象】開発スタッフ、クリエイター（例: 「宮本茂」「横井軍平」）、代表者名。
+            【対象外】架空の登場人物（→ character）。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="org" type="NamedEntityType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】ゲームの創作、制作、出版、権利、販売に関連する現実世界の企業・団体・組織・ブランド名。
+            ※credit要素の内部でも、本文（p等）の外部でも出現可能。
+            【抽出対象】開発元、発売元（例: 「任天堂株式会社」）、レーティング機関（「CERO」）、印刷所。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="location" type="NamedEntityType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】制作、出版、サポート、会社所在地等に関連する現実世界の地名、国名、住所、都市名。
+            ※credit要素の内部でも、本文（p等）の外部でも出現可能。
+            【抽出対象】企業所在地、サポートセンター住所（例: 「京都府京都市」）、製造国（「MADE IN JAPAN」）。
+            【対象外】ゲーム内の架空地名（→ gameLocation）。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="time" type="NamedEntityType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】現実の時期、出版年月、発売日、改訂日、サポート対応時間などを示す現実世界の時間・時期。
+            ※credit要素の内部でも、本文（p等）の外部でも出現可能。
+            【抽出対象】発行年月、発売日（例: 「1989年7月」）、著作権年（「1985」）、窓口受付時間。
+            【対象外】ゲーム内世界の時間帯・制限時間（→ gameTime）。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="copyRight" type="InlineTextType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】著作権・商標等の権利帰属を示す表示・文言（例: 「©1989 Nintendo」「All Rights Reserved.」）。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <!-- credit（文中・リスト内に出現可能） -->
+      <xs:element name="credit" type="CreditType">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】制作・出版・著作責任の1単位。roleとその対象（person, org等）を内包する。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+    </xs:choice>
+  </xs:complexType>
+
+  <!-- 汎用エンティティ型 -->
+  <xs:complexType name="NamedEntityType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="type" type="xs:string" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <!-- partOfDevice 型定義 -->
+  <xs:complexType name="PartOfDeviceType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="type" type="PartOfDeviceCategoryType" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <!-- partOfDevice の type 属性の定義および分類基準 -->
+  <xs:simpleType name="PartOfDeviceCategoryType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="button">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】押し込んで入力する単一のボタン、トリガー、バンパー。
+            【該当例】「Aボタン」「Bボタン」「Xボタン」「Yボタン」「Rボタン」「ZRボタン」「HOMEボタン」
+            【注意】十字キーは "dpad"、スティックは "stick" に分類すること。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+
+      <xs:enumeration value="stick">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】傾けて360度・無段階に入力するアナログスティック、ジョイスティック。
+            【該当例】「Lスティック」「Rスティック」「左スティック」「右スティック」「アナログスティック」
+            ※押し込み入力（L3/R3）もパーツ自体を指す場合は stick に分類する。
+            【注意】十字キーは "dpad" に分類すること。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+
+      <xs:enumeration value="dpad">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】十字型または上下左右に独立配置された方向入力キー（Directional Pad）。
+            【該当例】「十字ボタン」「十字キー」「方向キー」「方向ボタン」、特定方向を指す「上ボタン」「下キー」
+            【注意】アナログスティックは "stick"、独立したアクションボタンは "button" に分類すること。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+
+      <xs:enumeration value="touchScreen">
+        <xs:annotation>
+          <xs:documentation>
+            【定義】操作に用いるタッチ型のスクリーン。携帯型ゲーム機に用いられる。
+          </xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- section の type 属性の定義および分類基準 -->
+  <xs:simpleType name="SectionTypeCategory">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="character">
+        <xs:annotation><xs:documentation>登場人物やキャラクターやモンスターの紹介・プロフィールに関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="control">
+        <xs:annotation><xs:documentation>コントローラーの持ち方、ボタン配置、移動・アクション等の操作方法に関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="gameplay">
+        <xs:annotation><xs:documentation>ゲームの目的、基本的な進め方、ルール、遊び方の流れに関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="item">
+        <xs:annotation><xs:documentation>ゲーム内に登場するアイテム、武器、防具、道具の一覧や効果説明に関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="system">
+        <xs:annotation><xs:documentation>セーブ／ロード、ゲーム設定、オプション画面、メニュー構造などのシステム機能に関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="narrative">
+        <xs:annotation><xs:documentation>プロローグ、あらすじ、バックストーリー、世界観の設定に関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="instruction">
+        <xs:annotation><xs:documentation>ゲームを始める前の準備、機器の接続方法、カートリッジのセット方法など取扱説明に関するセクション。ゲーム内のインストラクションを含まない。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="reference">
+        <xs:annotation><xs:documentation>ステータス異常一覧、技・魔法リスト、早見表、用語集などの参照用資料セクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="warning">
+        <xs:annotation><xs:documentation>健康上の注意、光過敏性発作の警告、精密機器の取り扱い上の禁止事項などに関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="legal">
+        <xs:annotation><xs:documentation>著作権表示、ライセンス表記、商標、特許、保証規定、免責事項などの法的情報に関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="cover">
+        <xs:annotation><xs:documentation>表紙（表表紙、裏表紙、中表紙）に該当するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="preface">
+        <xs:annotation><xs:documentation>まえがき、はじめに、プレイヤーへの導入メッセージに関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="greeting">
+        <xs:annotation><xs:documentation>開発スタッフ、プロデューサー等からの挨拶、謝辞、メッセージに関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="toc">
+        <xs:annotation><xs:documentation>目次（Table of Contents）。ページ構成やセクション構成の一覧。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="company_info">
+        <xs:annotation><xs:documentation>会社の概要、住所、電話番号、ユーザーサポート窓口、お問い合わせ先に関するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="blank">
+        <xs:annotation><xs:documentation>白紙ページ、印刷調整用の空白ページに該当するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="memo">
+        <xs:annotation><xs:documentation>プレイヤーが手書きでパスワード等を書き留めるための「メモ欄」「NOTE」セクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="map">
+        <xs:annotation><xs:documentation>ゲーム内世界の地図の画像やその説明のセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="music">
+        <xs:annotation><xs:documentation>ゲーム内音楽の説明やクレジットのセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="credit">
+        <xs:annotation><xs:documentation>ゲームの創作や製品に関する責任をリスト型などで列挙するセクション。</xs:documentation></xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>

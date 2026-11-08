@@ -1,0 +1,10 @@
+# 入力データと生成結果
+input/
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
